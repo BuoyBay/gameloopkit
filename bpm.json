@@ -1,0 +1,27 @@
+{
+    "schema": 1,
+    "buoy": "0.72.0",
+    "dependencies": {
+        "physicskit": {
+            "git": "https://github.com/BuoyBay/physicskit.git",
+            "rev": "refs/heads/main"
+        },
+        "spritekit": {
+            "git": "https://github.com/BuoyBay/spritekit.git",
+            "rev": "refs/heads/main"
+        }
+    },
+    "files": [
+        "manifest.json",
+        "modules",
+        "README.md",
+        "PROVENANCE.md",
+        "resources/buoy-docs",
+        "resources",
+        "LICENSE",
+        "LICENSE-MIT.txt",
+        "LICENSE-APACHE.txt",
+        "LICENSE-DOCS.txt",
+        "NOTICE.md"
+    ]
+}

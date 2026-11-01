@@ -1,0 +1,177 @@
+Import physicskit
+Import spritekit
+
+Private Sub LoopFinite(value As Double, maximum As Double, label As String)
+    If Not (value >= 0.0 And value <= maximum) Then Throw New InvalidArgumentException(label + " must be finite and within bounds")
+End Sub
+
+Private Class LoopBinding
+    Public Property Body As PhysicsCircle
+    Public Property Actor As SpriteActor
+    Public Property PreviousX As Double
+    Public Property PreviousY As Double
+    Public Property CurrentX As Double
+    Public Property CurrentY As Double
+
+    Public Sub Capture()
+        CurrentX = Body.X
+        CurrentY = Body.Y
+        PreviousX = CurrentX
+        PreviousY = CurrentY
+    End Sub
+End Class
+
+''' A caller-clocked bounded accumulator over an existing PhysicsWorld.
+Public Class FixedGameLoop
+    Private Property mWorld As PhysicsWorld
+    Private Property mFrameLimit As Double
+    Private Property mStepLimit As Integer
+    Private Property mAccumulator As Double = 0.0
+    Private Property mDropped As Double = 0.0
+    Private Property mTotalSteps As Integer = 0
+    Private Property mLastSteps As Integer = 0
+    Private Property mBindings As Array Of LoopBinding = []
+    Public Property Paused As Boolean = False
+
+    Public Sub Constructor(world As PhysicsWorld, maxFrameSeconds As Double = 0.25, maxSteps As Integer = 8)
+        If world Is Nil Then Throw New InvalidArgumentException("World must not be Nil")
+        LoopFinite(maxFrameSeconds, 60.0, "Frame limit")
+        If maxFrameSeconds < world.FixedDelta Then Throw New InvalidArgumentException("Frame limit must permit at least one fixed step")
+        If maxSteps < 1 Or maxSteps > 1000 Then Throw New InvalidArgumentException("Step limit must be 1..1000")
+        mWorld = world
+        mFrameLimit = maxFrameSeconds
+        mStepLimit = maxSteps
+    End Sub
+
+    Public Property FixedDelta As Double
+        Get
+            Return mWorld.FixedDelta
+        End Get
+    End Property
+    Public Property PendingSeconds As Double
+        Get
+            Return mAccumulator
+        End Get
+    End Property
+    Public Property Alpha As Double
+        Get
+            Return mAccumulator / mWorld.FixedDelta
+        End Get
+    End Property
+    Public Property DroppedSeconds As Double
+        Get
+            Return mDropped
+        End Get
+    End Property
+    Public Property TotalSteps As Integer
+        Get
+            Return mTotalSteps
+        End Get
+    End Property
+    Public Property LastSteps As Integer
+        Get
+            Return mLastSteps
+        End Get
+    End Property
+    Public Property BindingCount As Integer
+        Get
+            Return Array.Count(mBindings)
+        End Get
+    End Property
+
+    ''' One body and actor may occur at most once in this loop.
+    Public Sub Bind(body As PhysicsCircle, actor As SpriteActor)
+        If body Is Nil Or actor Is Nil Then Throw New InvalidArgumentException("Body and actor must not be Nil")
+        If Array.Count(mBindings) >= 256 Then Throw New InvalidArgumentException("Binding limit is 256")
+        For Each entry As LoopBinding In mBindings
+            If entry.Body Is body Or entry.Actor Is actor Then Throw New InvalidArgumentException("Body or actor already bound")
+        Next
+        Dim entry As New LoopBinding()
+        entry.Body = body
+        entry.Actor = actor
+        entry.Capture()
+        Array.Append(mBindings, entry)
+    End Sub
+
+    Public Function Unbind(actor As SpriteActor) As Boolean
+        For index As Integer = 0 To Array.Count(mBindings) - 1
+            If mBindings(index).Actor Is actor Then
+                Array.RemoveAt(mBindings, index)
+                Return True
+            End If
+        Next
+        Return False
+    End Function
+
+    Public Sub ClearBindings()
+        Array.Clear(mBindings)
+    End Sub
+
+    ''' Clear clock statistics/history without resetting physics or Paused.
+    Public Sub Reset()
+        mAccumulator = 0.0
+        mDropped = 0.0
+        mTotalSteps = 0
+        mLastSteps = 0
+        For Each entry As LoopBinding In mBindings
+            entry.Capture()
+        Next
+    End Sub
+
+    ''' Paused input is ignored; caller must keep sampling the clock while paused.
+    Public Function Advance(elapsedSeconds As Double) As Integer
+        LoopFinite(elapsedSeconds, 3600.0, "Elapsed time")
+        If Paused Then
+            mLastSteps = 0
+            Return 0
+        End If
+        If mDropped + elapsedSeconds > 1000000000000.0 Then Throw New InvalidArgumentException("Clock statistics exhausted; Reset required")
+        mLastSteps = 0
+        Dim accepted As Double = Math.Min(elapsedSeconds, mFrameLimit)
+        mDropped += elapsedSeconds - accepted
+        mAccumulator += accepted
+        While mAccumulator >= mWorld.FixedDelta And mLastSteps < mStepLimit
+            If mTotalSteps >= 1000000000000 Then Throw New InvalidArgumentException("Step statistics exhausted; Reset required")
+            mWorld.Step()
+            mAccumulator -= mWorld.FixedDelta
+            mLastSteps += 1
+            mTotalSteps += 1
+            For Each entry As LoopBinding In mBindings
+                entry.PreviousX = entry.CurrentX
+                entry.PreviousY = entry.CurrentY
+                entry.CurrentX = entry.Body.X
+                entry.CurrentY = entry.Body.Y
+            Next
+        End While
+        If mAccumulator >= mWorld.FixedDelta Then
+            Dim discarded As Double = Math.Floor(mAccumulator / mWorld.FixedDelta) * mWorld.FixedDelta
+            mAccumulator = Math.Max(0.0, mAccumulator - discarded)
+            mDropped += discarded
+            ' Guard a rounded quotient that left one full step behind.
+            If mAccumulator >= mWorld.FixedDelta Then
+                mAccumulator -= mWorld.FixedDelta
+                mDropped += mWorld.FixedDelta
+            End If
+        End If
+        Return mLastSteps
+    End Function
+
+    ''' Place sprite centers at interpolated or current physics positions.
+    Public Sub SyncSprites(interpolate As Boolean = True)
+        Dim alpha As Double = 1.0
+        If interpolate Then alpha = Me.Alpha
+        If Not (alpha >= 0.0 And alpha < 1.0) And interpolate Then Throw New InvalidArgumentException("Pending failed step; Reset or retry before interpolating")
+        Dim xs() As Double
+        Dim ys() As Double
+        For Each entry As LoopBinding In mBindings
+            Dim x As Double = entry.PreviousX + (entry.CurrentX - entry.PreviousX) * alpha - entry.Actor.Width / 2.0
+            Dim y As Double = entry.PreviousY + (entry.CurrentY - entry.PreviousY) * alpha - entry.Actor.Height / 2.0
+            If Not (x >= -1000000000.0 And x <= 1000000000.0 And y >= -1000000000.0 And y <= 1000000000.0) Then Throw New InvalidArgumentException("Bound sprite position outside SpriteKit bounds")
+            Array.Append(xs, x)
+            Array.Append(ys, y)
+        Next
+        For index As Integer = 0 To Array.Count(mBindings) - 1
+            mBindings(index).Actor.Place(xs(index), ys(index))
+        Next
+    End Sub
+End Class
