@@ -47,26 +47,9 @@ coordinate. PhysicsKit's discrete collision and SpriteKit's rendering limits
 still apply. This does not add collision callbacks, spatial indexing, animation
 scheduling, clock smoothing, input queues or a native GPU backend.
 
-## Verification and example
+## Host integration
 
-
-The runner seals all three source packages into an isolated project, checks
-module/test/demo across six desktop targets, executes deterministic clock and
-synchronization tests, and builds the Canvas demo. Linux execution uses the host's
-existing JPEG compatibility library when its UI runtime needs it. `BUOY` selects
-the compiler and `BPM_PACKAGER` the packager (default `/usr/bin/buoy`). Other
-platforms are compiler-checked.
-
-The example (not included in this repository) combines
-bouncing physics bodies and interpolated sprites. Click to pause/resume, or press
-S to stop/restart its timer with a fresh elapsed-time baseline. Its
-Timer samples a monotonic clock, passes elapsed time to the loop, synchronizes
-sprites, then invalidates the Canvas; drawing itself does not advance physics.
-
-Maintainers run the private validation suite before release. See the repository README for public build instructions.
-
-Maintainers run the private validation suite before release. See the repository README for public build instructions.
-
-The BPM manifest references sibling PhysicsKit/SpriteKit source packages for
-development. Distribute their sealed archives alongside GameLoopKit's archive.
-Nothing is published to a registry.
+The BPM manifest declares PhysicsKit and SpriteKit dependencies. Install their
+matching archives alongside GameLoopKit when assembling a consumer. A GUI host
+samples its monotonic clock, supplies elapsed time to the loop, synchronizes
+sprites and invalidates its Canvas; drawing does not advance the simulation.
