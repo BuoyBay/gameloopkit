@@ -1,1 +1,1 @@
-{"schema":1,"name":"gameloopkit","version":"0.1.0","description":"Drive fixed-step physics and interpolated sprite updates"}
+{"schema":1,"name":"gameloopkit","version":"0.1.0","description":"Fixed-step physics loop with interpolated sprites"}

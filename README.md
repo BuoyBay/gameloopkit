@@ -1,4 +1,4 @@
-# Drive fixed-step physics and interpolated sprite updates
+# Fixed-step physics loop with interpolated sprites
 
 Caller-clocked fixed-step accumulation around PhysicsKit, with interpolated
 SpriteKit placement. `Import gameloopkit`; consumers also import `physicskit`
